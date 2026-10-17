@@ -1,0 +1,10 @@
+# dsh-prompt-dock 宿主半 bundle patch（profile 组合层）
+# 语义：向 profile 组合树插入 dsh-prompt-dock 插件行；客户端半由 package.json 的
+# dsh.client 声明驱动，dsh-client-modules 自动把 /plugins/dsh-prompt-dock/client.js 纳入启动图。
+- insert:
+    - id: dsh-prompt-dock
+      name: 'dsh-prompt-dock'
+      config:
+        # 改写模型策略：null = 跟随全局默认模型（agentDefaultModel）
+        # 注意：此处的强制模型优先于设置面板选择，只在部署方需要统一路由时填写。
+        model: null
