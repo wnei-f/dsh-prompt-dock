@@ -1,6 +1,6 @@
 {
   "name": "dsh-prompt-dock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DSH 提示词修改助手：挂在输入框工具行（conversation.input.right，模型选择左侧），对草稿做 AI 改写（简洁/详细/结构化/译英/自定义，SSE 流式、可中断、可撤销、随会话上下文）并支持模板一键插入。含 @文件//命令 芯片保护与回填变更检测，改写接口仅限本机回环访问。UI 对齐官方模型选择下拉框。",
   "type": "module",
   "main": "lib/index.js",
