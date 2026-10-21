@@ -1,10 +1,14 @@
 # dsh-prompt-dock 宿主半 bundle patch（profile 组合层）
 # 语义：向 profile 组合树插入 dsh-prompt-dock 插件行；客户端半由 package.json 的
 # dsh.client 声明驱动，dsh-client-modules 自动把 /plugins/dsh-prompt-dock/client.js 纳入启动图。
+#
+# 这里**不写任何 config**：所有用户设置都由插件 Config 的 volatile 字段承载，
+# 由 DSH 官方设置表单写入并落在 profile 的 cordis.patch.yml 里。
+# 部署方若要统一路由（强制所有用户使用同一个改写模型），可以在本行加：
+#   config:
+#     rewriteProvider: deepseek-official
+#     rewriteModel: deepseek-chat
+# 但注意：一旦在此处写死，用户在插件页修改会被这层覆盖。
 - insert:
     - id: dsh-prompt-dock
       name: 'dsh-prompt-dock'
-      config:
-        # 改写模型策略：null = 跟随全局默认模型（agentDefaultModel）
-        # 注意：此处的强制模型优先于设置面板选择，只在部署方需要统一路由时填写。
-        model: null
