@@ -94,6 +94,9 @@ const fakeCtx = {
     if (name === "agentDefaultModel") return { currentSelection: () => ({ provider: "p1", model: "m1" }) };
     return undefined;
   },
+  // 宿主事件订阅（模型目录缓存失效用）；返回 disposer，与 Cordis 语义一致。
+  // 这里只需证明 apply 阶段能正常订阅而不抛错，事件触发语义由 [12] 的独立 ctx 覆盖。
+  on() { return () => {}; },
   effect(fn) { return fn(); },
 };
 
@@ -186,8 +189,8 @@ console.log("\n[3.5] 内置风格与模板");
   const r = await fetch(`${base}/api/prompt-dock/config`);
   const { styles, templates } = await r.json();
   const ids = styles.map((s) => s.id);
-  check("5 个内置风格且 id 顺序稳定", ids.join(",") === "concise,detailed,structured,en,custom", ids.join(","));
-  check("风格 name 与客户端回退一致", styles.map((s) => s.name).join(",") === "更简洁,更详细,结构化,译成英文,自定义", styles.map((s) => s.name).join(","));
+  check("6 个内置风格且 id 顺序稳定", ids.join(",") === "concise,detailed,structured,precise,en,custom", ids.join(","));
+  check("风格 name 与客户端回退一致", styles.map((s) => s.name).join(",") === "更简洁,更详细,结构化,更精准,译成英文,自定义", styles.map((s) => s.name).join(","));
   check("custom 的 instruction 为空（由用户自定义指令提供）", styles.find((s) => s.id === "custom").instruction === "");
   check("其余风格都有非空指令", styles.filter((s) => s.id !== "custom").every((s) => typeof s.instruction === "string" && s.instruction.length > 10));
   check("concise 明确要求保留硬性约束", /必须原样保留/.test(styles.find((s) => s.id === "concise").instruction));
@@ -198,6 +201,13 @@ console.log("\n[3.5] 内置风格与模板");
   check("detailed 草稿过短不做比例扩写", /不足三行/.test(styles.find((s) => s.id === "detailed").instruction));
   check("structured 声明章节顺序", /目标 \/ 上下文 \/ 任务步骤 \/ 约束 \/ 输出格式/.test(styles.find((s) => s.id === "structured").instruction));
   check("structured 缺失章节写「未指定」", /未指定/.test(styles.find((s) => s.id === "structured").instruction));
+  check("precise 说明要做什么/对什么对象做/执行哪些动作",
+    /要做什么/.test(styles.find((s) => s.id === "precise").instruction) &&
+    /对什么对象做/.test(styles.find((s) => s.id === "precise").instruction) &&
+    /执行哪些动作/.test(styles.find((s) => s.id === "precise").instruction));
+  check("precise 不新增未要求的动作与对象", /不新增草稿未要求的动作/.test(styles.find((s) => s.id === "precise").instruction));
+  check("precise 草稿未给出的标「待确认」", /待确认/.test(styles.find((s) => s.id === "precise").instruction));
+  check("precise 有长度区间", /80%–130%/.test(styles.find((s) => s.id === "precise").instruction));
   check("en 要求标识符保留", /逐字保留/.test(styles.find((s) => s.id === "en").instruction));
   check("en 要求判断强度不变", /判断强度/.test(styles.find((s) => s.id === "en").instruction));
 
@@ -479,6 +489,92 @@ console.log("\n[8] 旧配置迁移（幂等回填 + .migrated）");
   const raw = await fs.readFile(join(home, "prompt-dock", "probe.json"), "utf8");
   check("探针文件不含草稿原文", !raw.includes(SECRET), raw.slice(0, 120));
   check("探针保留结构信息", /propKeys/.test(raw) && /chars/.test(raw), raw.slice(0, 160));
+  srv.close();
+}
+
+// ---- [12] 模型目录：多来源全部枚举、空组保留、缓存按事件失效、fresh 绕过缓存 ----
+{
+  const routes5 = new Map();
+  const evMap = new Map();
+  let providers = [
+    { id: "local-a", name: "本地 A" },
+    { id: "local-b", name: "本地 B" },
+    { id: "local-c", name: "本地 C" },
+  ];
+  let byProvider = new Map([
+    ["local-a", [{ id: "a-1", name: "A-1" }, { id: "a-2", name: "A-2" }]],
+    ["local-b", [{ id: "a-1", name: "A-1" }]],
+  ]);
+  const failing = new Set(["local-c"]);
+  let listProvidersCalls = 0;
+  const emit = (event) => { for (const cb of (evMap.get(event) || []).slice()) { try { cb(); } catch (e) {} } };
+  const ctx5 = {
+    get(n) {
+      if (n === "webServer") return { register({ path, handler }) { routes5.set(path, handler); return () => routes5.delete(path); } };
+      if (n === "llm") {
+        return {
+          listProviders: () => { listProvidersCalls++; return providers.map((p) => ({ ...p })); },
+          listModels: async (id) => {
+            if (failing.has(id)) throw new Error("目录不可用: " + id);
+            return (byProvider.get(id) || []).map((m) => ({ ...m }));
+          },
+        };
+      }
+      return undefined;
+    },
+    on(event, cb) {
+      const arr = evMap.get(event) || [];
+      arr.push(cb);
+      evMap.set(event, arr);
+      return () => evMap.set(event, (evMap.get(event) || []).filter((f) => f !== cb));
+    },
+    effect(fn) { return fn(); },
+  };
+  apply(ctx5, new Proxy({}, { get: (_t, key) => liveCfg[key] }));
+  await apply.migrated;
+  const srv = http.createServer(async (req, res) => {
+    const h = routes5.get(req.url.split("?")[0]);
+    if (!h) { res.writeHead(404); res.end(); return; }
+    await h(req, res);
+  });
+  const p5 = await new Promise((r) => srv.listen(0, "127.0.0.1", () => r(srv.address().port)));
+  const url5 = `http://127.0.0.1:${p5}/api/prompt-dock/models`;
+  const readModels = async (suffix = "") => (await (await fetch(url5 + suffix)).json());
+  // 模块级缓存可能被前面的实例写过：宿主事件失效一次，等价于真实进程里重新挂载
+  emit("llm/adapters-updated");
+
+  let j = await readModels();
+  check("/models 返回全部 3 个来源", j.ok && j.groups.length === 3,
+    j.ok ? j.groups.map((g) => g.id) : j.error);
+  const byId = j.ok ? Object.fromEntries(j.groups.map((g) => [g.id, g])) : {};
+  check("多来源各自的模型都在",
+    !!byId["local-a"] && byId["local-a"].models.length === 2 &&
+    !!byId["local-b"] && byId["local-b"].models.length === 1,
+    JSON.stringify(j.groups));
+  const failed = j.ok ? j.groups.find((g) => g.id === "local-c") : null;
+  check("读取失败的来源仍保留（不静默消失）", !!failed && failed.models.length === 0 && !!failed.error, failed && failed.error);
+  check("来源显示名按 provider 返回", failed && failed.name === "本地 C", failed && failed.name);
+
+  // 缓存：紧接着再读一次不应重新枚举
+  const callsAfterFirst = listProvidersCalls;
+  await readModels();
+  check("短时间内重复读取走缓存", listProvidersCalls === callsAfterFirst, listProvidersCalls);
+
+  // 供应商增删后，宿主事件必须让缓存立即失效（不等 10s TTL）
+  providers = providers.concat([{ id: "local-d", name: "本地 D" }]);
+  byProvider.set("local-d", [{ id: "d-1", name: "D-1" }]);
+  emit("llm/adapters-updated");
+  j = await readModels();
+  check("provider 变化事件后新来源立即出现",
+    j.ok && j.groups.length === 4 && listProvidersCalls > callsAfterFirst,
+    JSON.stringify(j.groups && j.groups.map((g) => g.id)));
+
+  // 即使没有事件，?fresh=1 也必须绕过缓存
+  providers = providers.concat([{ id: "local-e", name: "本地 E" }]);
+  byProvider.set("local-e", [{ id: "e-1", name: "E-1" }]);
+  j = await readModels("?fresh=1");
+  check("fresh=1 绕过缓存拿到最新来源", j.ok && j.groups.length === 5,
+    JSON.stringify(j.groups && j.groups.map((g) => g.id)));
   srv.close();
 }
 

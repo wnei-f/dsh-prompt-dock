@@ -317,8 +317,10 @@ check("不再有 customInstruction 字段", !/customInstruction/.test(src));
 check("不再有 SettingsPop / IconSliders", !/function SettingsPop|function IconSliders|IconSliders/.test(src));
 check("不再有 settings.plugin.item / settings.register",
   !/settings\.plugin\.item|settings\.register|installSection|settingsScope/.test(src));
-check("声明了 plugins.bundle.config 座位", src.includes('"plugins.bundle.config"'));
-check("配置座位 key 为包名", /PKG_NAME = "dsh-prompt-dock"/.test(src) && /key: PKG_NAME/.test(src));
+check("声明了左侧常用面板座位 sidebar.panellist", src.includes('"sidebar.panellist"'));
+check("声明了中央面板页座位 main（key 与侧栏 id 一致）",
+  src.includes('name: "main"') && /key: PANEL_ID/.test(src) && /PANEL_ID = "prompt-dock"/.test(src));
+check("设置已移出 「插件」页（不再注册 plugins.bundle.config）", !src.includes('"plugins.bundle.config"'));
 check("设置只经 HTTP 路由保存（不依赖 form.mutate）",
   src.includes("/config") &&
   !stringLiterals.some((lit) => /form\.(?:mutate|state)/.test(lit)),

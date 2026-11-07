@@ -1,6 +1,6 @@
 /**
  * 临时冒烟测试（不随插件发布）：用桩 React 在 Node 里真实加载 lib/client.js。
- * 覆盖：① 模块注册形状 ② 两个座位（工具行 + plugins.bundle.config） ③ 工具行三级降级
+ * 覆盖：① 模块注册形状 ② 三个座位（工具行 + 左侧常用面板入口 + 中央面板页） ③ 工具行三级降级
  * ④ 六态反馈机与六类错误文案 ⑤ 设置卡片七组 ⑥ Toast 上限 ⑦ 视觉令牌（无硬编码颜色）。
  */
 import { readFileSync } from "node:fs";
@@ -270,21 +270,37 @@ check("通过 __ModuleLoader__.load 注册", loaded !== null && loaded.id === "d
 check("exports.apply 是函数", typeof mod.apply === "function");
 check("exports.inject 含 slots", Array.isArray(mod.inject) && mod.inject.includes("slots"), mod.inject);
 
-console.log("\n[2] 两个座位");
+console.log("\n[2] 三个座位：工具行 + 左侧常用面板入口 + 中央面板页");
 mod.apply(fakeCtx);
 const rowDef = seatDef("conversation.input.right");
-const cfgDef = seatDef("plugins.bundle.config");
+const panelDef = seatDef("sidebar.panellist");
+const mainDef = seatDef("main");
 check("工具行座位 conversation.input.right", !!rowDef && rowDef.name === "conversation.input.right", rowDef);
 check("工具行注册 id 为 prompt-dock", !!rowDef && rowDef.id === "prompt-dock", rowDef);
 check("工具行 label 返回中文名", !!rowDef && typeof rowDef.label === "function" && rowDef.label() === "提示词助手");
-check("配置卡片座位 plugins.bundle.config", !!cfgDef && cfgDef.name === "plugins.bundle.config", cfgDef);
-check("配置卡片 key 为 npm 包名 dsh-prompt-dock", !!cfgDef && cfgDef.key === "dsh-prompt-dock", cfgDef && cfgDef.key);
-check("配置卡片声明 locale 命名空间", !!cfgDef && cfgDef.locale === "promptDock", cfgDef && cfgDef.locale);
-check("配置卡片组件已登记", typeof seatComponent("plugins.bundle.config") === "function");
+check("左侧常用面板入口座位 sidebar.panellist", !!panelDef && panelDef.name === "sidebar.panellist", panelDef);
+check("面板入口 id 为 prompt-dock", !!panelDef && panelDef.id === "prompt-dock", panelDef && panelDef.id);
+check("面板入口 label 返回中文名", !!panelDef && typeof panelDef.label === "function" && panelDef.label() === "提示词助手");
+check("面板入口 order 排在「远程」(45) 之后", !!panelDef && typeof panelDef.order === "number" && panelDef.order > 45, panelDef && panelDef.order);
+check("中央面板页座位 main，key 与入口 id 一致", !!mainDef && mainDef.name === "main" && mainDef.key === "prompt-dock", mainDef);
+check("面板入口组件已登记", typeof seatComponent("sidebar.panellist") === "function");
+check("中央面板页组件已登记", typeof seatComponent("main") === "function");
+check("设置入口已移出「插件」页（不注册 plugins.bundle.config）",
+  !registrations.some((r) => r.slot === "plugins.bundle.config"), registrations.map((r) => r.slot));
+check("「打开设置」动作会切到本插件面板", /panelOpener[\s\S]{0,400}layout\.selectPanel\(PANEL_ID\)/.test(src));
 check("不再注册已废弃的 settings.plugin.item", !registrations.some((r) => /settings\.plugin\.item|settings\.register/.test(r.slot)),
   registrations.map((r) => r.slot));
 check("源码不含 settings.register / installSection / settingsScope",
   !/settings\.register|installSection|settingsScope/.test(src), true);
+
+// 侧栏图标：官方 sparkle，尺寸随外壳传入，并带面板标识供样式/皮肤定位
+{
+  const iconNodes = walk(React.createElement(I.PromptDockPanelIcon, { size: 18, active: false }));
+  check("面板入口图标渲染 svg 且尺寸随外壳", iconNodes.some((n) => n.type === "svg" && n.props.width === 18),
+    iconNodes.filter((n) => n.type === "svg").map((n) => n.props.width));
+  check("面板入口图标带 data-dsh-panel-entry 标识",
+    iconNodes.some((n) => n.props["data-dsh-panel-entry"] === "prompt-dock"));
+}
 
 // =====================================================================
 console.log("\n[3] 工具行：无设置入口，风格/模板两个独立触发器");
@@ -327,8 +343,8 @@ console.log("\n[3] 工具行：无设置入口，风格/模板两个独立触发
   check("风格菜单打开时只有一个弹层", n2.filter((x) => String(x.props.className || "").includes("pd-popover")).length === 1,
     n2.filter((x) => String(x.props.className || "").includes("pd-popover")).length);
   check("打开的弹层是风格选项", n2.some((x) => x.props["aria-label"] === "风格" && String(x.props.className || "").includes("pd-popover")));
-  check("风格弹层里有全部 5 个风格",
-    n2.filter((x) => String(x.props.className || "").includes("pd-optionName")).map((x) => x.children[0]).join(",") === "更简洁,更详细,结构化,译成英文,自定义",
+  check("风格弹层里有全部 6 个风格",
+    n2.filter((x) => String(x.props.className || "").includes("pd-optionName")).map((x) => x.children[0]).join(",") === "更简洁,更详细,结构化,更精准,译成英文,自定义",
     n2.filter((x) => String(x.props.className || "").includes("pd-optionName")).map((x) => x.children[0]));
   check("当前风格用底色+描边高亮（pd-optionOn），无对勾列",
     n2.filter((x) => String(x.props.className || "").includes("pd-optionOn")).length === 1 &&
@@ -762,10 +778,12 @@ console.log("\n[13] 设置卡片：七组 + 只提交改动分组的键");
   mountCard({ view: "page" });
   await tick(20);
 
-  // summary 视图只返回一行
-  const summary = mountCard({ view: "summary" });
-  const summaryText = textOf(summary);
-  check("summary 视图返回一行摘要", summaryText.length > 0 && summaryText.length < 120, summaryText);
+  // 左侧「提示词助手」面板页：整页承载同一张设置卡片（唯一设置入口）
+  const pageNodes = walk(React.createElement(I.PromptDockPanelPage, {}));
+  check("面板页容器存在（整页可滚动）",
+    pageNodes.some((n) => /pd-page\b/.test(n.props.className || "") && n.props["data-pd-page"] === "1"));
+  check("面板页内渲染设置卡片标题",
+    pageNodes.some((n) => /pd-cardTitle/.test(n.props.className || "") && textOf(n) === "提示词助手"));
 
   let nodes = walk(mountCard({ view: "page" }));
   const groups = nodes.filter((x) => /data-pd-group/.test(Object.keys(x.props).join(",")) && x.props["data-pd-group"]);
@@ -1228,6 +1246,115 @@ console.log("\n[24] 同名模型不再让人误判「没改成功」");
     /\.pd-modelTriggerFixed\{[^}]*border-color:var\(--dsw-alias-state-business-primary\)/.test(I.CSS_TEXT), true);
 }
 
+console.log("\n[26] 多个模型供应商：分组、可滚动、空来源与刷新");
+{
+  resetAll();
+  let conf = {
+    ok: true, storage: "config", rewriteModel: null, timeoutMs: 90000,
+    contextEnabled: true, contextTurns: 6, globalDiscipline: "正文", globalDisciplineCustom: false,
+    styles: [{ id: "concise", name: "更简洁", instruction: "x" }], templates: [],
+    toolbar: { showStyleEntry: "auto", showTemplateEntry: "auto", compactThreshold: 320 },
+    shortcuts: { openStyle: "Alt+M", openTemplate: "Alt+T", rewrite: "Alt+R" },
+  };
+  // 三个本地供应商：A 模型多（会占满一屏）、B 与 A 有同名模型、C 目录读取失败
+  const groupsPayload = () => [
+    { id: "local-a", name: "本地 A", models: [
+      { id: "m1", name: "M-1" }, { id: "m2", name: "M-2" }, { id: "m3", name: "M-3" },
+      { id: "m4", name: "M-4" }, { id: "m5", name: "M-5" }, { id: "m6", name: "M-6" },
+    ] },
+    { id: "local-b", name: "本地 B", models: [{ id: "m1", name: "M-1" }, { id: "b-2", name: "B-2" }] },
+    { id: "local-c", name: "本地 C", models: [], error: "凭据缺失" },
+  ];
+  let modelsCalls = 0;
+  const posts = [];
+  currentFetch = jsonFetch((url, opts) => {
+    const method = (opts && opts.method) || "GET";
+    if (url.endsWith("/config")) {
+      if (method === "POST") { const b = JSON.parse(opts.body || "{}"); posts.push(b); conf = Object.assign({}, conf, b); }
+      return { ok: true, json: conf };
+    }
+    if (url.includes("/models")) {
+      modelsCalls++;
+      return { json: { ok: true, groups: groupsPayload(), global: { provider: "local-b", model: "m1" } } };
+    }
+    return { json: { ok: true } };
+  });
+  runEffectsEnabled = true;
+  resetHooks();
+  mountCard({ view: "page" });
+  await tick(20);
+  check("挂载后拉取一次模型目录", modelsCalls === 1, modelsCalls);
+
+  let nodes = walk(mountCard({ view: "page" }));
+  const trigger = findButton(nodes, (n) => /pd-modelTrigger/.test(n.props.className || ""));
+  trigger.props.onClick();
+  check("打开下拉会强制刷新目录（fresh）", modelsCalls >= 2, modelsCalls);
+  await tick(20);
+  nodes = walk(mountCard({ view: "page" }));
+
+  const seen = new Set();
+  const opts = nodes.filter((n) => {
+    if (n.type !== "button" || n.props.role !== "menuitem") return false;
+    const k = String(n.props["data-index"]);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  // 1 个「跟随全局默认」+ A 6 个 + B 2 个 + C 1 个空来源提示行
+  check("所有来源的模型行都渲染（不是只剩一个来源）", opts.length === 10, opts.length);
+  const aRows = opts.filter((n) => /本地 A · m/.test(textOf(n)));
+  check("来源 A 的 6 个模型都在", aRows.length === 6, aRows.map(textOf));
+  const sameName = opts.filter((n) => /^M-1/.test(textOf(n)));
+  check("同名模型按来源分别列出", sameName.length === 2, sameName.map(textOf));
+  const headers = [...new Set(nodes.filter((n) => /pd-groupLabel/.test(n.props.className || "")).map(textOf))];
+  check("每个来源都有分组标题", headers.length === 3 && headers[0] === "本地 A" && headers[2] === "本地 C", headers);
+  const pop = nodes.find((n) => /pd-popover\b/.test(n.props.className || "") && n.props["data-pd-popover"] === "1");
+  check("模型菜单声明为可滚动（grouped）", !!pop && /pd-popoverScroll/.test(pop.props.className || "") &&
+    /grouped: true/.test(src), pop && pop.props.className);
+  const emptyRow = opts.find((n) => /无可用模型/.test(textOf(n)));
+  check("空目录来源保留占位行（不静默消失）",
+    !!emptyRow && emptyRow.props.disabled === true && /pd-optionDisabled/.test(emptyRow.props.className || "") &&
+    /凭据缺失/.test(textOf(emptyRow)), emptyRow && textOf(emptyRow));
+  if (emptyRow && emptyRow.props.onClick) emptyRow.props.onClick({ stopPropagation() {} });
+  check("点空来源占位行不会保存模型", posts.length === 0, posts.length);
+  check("样式保证行不被压扁", /\.pd-option\{[^}]*flex:none/.test(I.CSS_TEXT), true);
+  check("样式定义不可选行", I.CSS_TEXT.includes(".pd-optionDisabled{"), true);
+
+  // 目录读取失败：下拉出现可点的重试行，点击后重新请求
+  resetAll();
+  let failCalls = 0;
+  currentFetch = jsonFetch((url, opts) => {
+    const method = (opts && opts.method) || "GET";
+    if (url.endsWith("/config")) return { ok: true, json: conf };
+    if (url.includes("/models")) {
+      failCalls++;
+      return { ok: false, status: 500, json: { ok: false, error: { code: "LLM_FAILED", message: "宿主未响应" } } };
+    }
+    return { json: { ok: true } };
+  });
+  runEffectsEnabled = true;
+  resetHooks();
+  mountCard({ view: "page" });
+  await tick(20);
+  nodes = walk(mountCard({ view: "page" }));
+  findButton(nodes, (n) => /pd-modelTrigger/.test(n.props.className || "")).props.onClick();
+  await tick(20);
+  nodes = walk(mountCard({ view: "page" }));
+  const seen2 = new Set();
+  const opts2 = nodes.filter((n) => {
+    if (n.type !== "button" || n.props.role !== "menuitem") return false;
+    const k = String(n.props["data-index"]);
+    if (seen2.has(k)) return false;
+    seen2.add(k);
+    return true;
+  });
+  const retryRow = opts2.find((n) => /模型目录读取失败，点击重试/.test(textOf(n)));
+  check("读取失败时给出重试行", !!retryRow, opts2.map(textOf));
+  const callsBeforeRetry = failCalls;
+  if (retryRow && retryRow.props.onClick) retryRow.props.onClick({ stopPropagation() {} });
+  check("点重试行会重新请求目录", failCalls > callsBeforeRetry, failCalls);
+}
+
 console.log("\n[25] 错误提示不改变「风格/模板/改写」的位置");
 {
   // 布局约束：.pd-row 是 flex，错误槽位必须 absolute（脱离流），
@@ -1335,6 +1462,87 @@ console.log("\n[26] SSE 流不能被 request() 预读（真实「连接失败」
   currentFetch = () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ ok: false }) });
 }
 
+console.log("\n[38] 改写后手动编辑：按钮回到改写键，撤销改到提示条并先确认");
+{
+  resetAll();
+  I.resetToasts();
+  const { props, state } = makeWiredProps("原始草稿");
+  currentFetch = sseFetch([
+    'event: meta\ndata: {"requestId":"r1","draftChars":4,"timeoutMs":90000}\n\n',
+    'event: delta\ndata: {"text":"新"}\n\n',
+    'event: delta\ndata: {"text":"草稿文本"}\n\n',
+    'event: done\ndata: {"text":"新草稿文本"}\n\n',
+  ]);
+  let confirmAsked = 0;
+  let confirmAnswer = false;
+  sandbox.window.confirm = () => { confirmAsked++; return confirmAnswer; };
+  runEffectsEnabled = true;
+  let nodes = remountToolbar(props);
+  findButton(nodes, (n) => n.props["aria-label"] === "改写").props.onClick();
+  for (let i = 0; i < 40; i++) { await tick(30); nodes = remountToolbar(props); }
+  check("改写成功", state.draft === "新草稿文本" && I.getStore().phase === "success", state.draft);
+  check("未编辑时按钮仍是撤销",
+    findButton(nodes, (n) => n.props["aria-label"] === "撤销改写") !== undefined,
+    nodes.filter((n) => n.type === "button").map((n) => n.props["aria-label"]));
+
+  // 用户手动编辑改写结果
+  state.draft = "新草稿文本（我又改了一句）";
+  nodes = remountToolbar(props);
+  const rewriteBtnAgain = findButton(nodes, (n) => n.props["aria-label"] === "改写");
+  check("手动编辑后按钮回到「改写」", !!rewriteBtnAgain,
+    nodes.filter((n) => n.type === "button").map((n) => n.props["aria-label"]));
+  check("手动编辑后按钮不再是撤销", !nodes.some((n) => n.type === "button" && n.props["aria-label"] === "撤销改写"));
+  const hintBox = nodes.find((x) => x.props["data-pd-hint"] === "1" && x.props["data-pd-hint-undo"] === "1");
+  check("提示条出现撤销入口", !!hintBox, nodes.filter((x) => x.props["data-pd-hint"]).map((x) => textOf(x)));
+  const undoLink = hintBox && walk(hintBox).find((x) => x.type === "button" && /撤销改写/.test(textOf(x)));
+  check("撤销入口是可点按钮", !!undoLink, hintBox && textOf(hintBox));
+
+  // 第一次点：取消确认 → 不改草稿
+  confirmAnswer = false;
+  undoLink.props.onClick();
+  for (let i = 0; i < 6; i++) { await tick(30); remountToolbar(props); }
+  check("确认框被弹出", confirmAsked === 1, confirmAsked);
+  check("取消确认时草稿不变", state.draft === "新草稿文本（我又改了一句）", state.draft);
+  check("取消确认时仍处于已改写状态", I.getStore().phase === "success", I.getStore().phase);
+
+  // 第二次点：确认 → 恢复原文
+  confirmAnswer = true;
+  nodes = remountToolbar(props);
+  const hintBox2 = nodes.find((x) => x.props["data-pd-hint"] === "1" && x.props["data-pd-hint-undo"] === "1");
+  const undoLink2 = hintBox2 && walk(hintBox2).find((x) => x.type === "button" && /撤销改写/.test(textOf(x)));
+  undoLink2.props.onClick();
+  for (let i = 0; i < 12; i++) { await tick(40); remountToolbar(props); }
+  check("确认后恢复原文（手动编辑被丢弃）", state.draft === "原始草稿", state.draft);
+  check("撤销后回到 idle", I.getStore().phase === "idle", I.getStore().phase);
+  check("撤销有提示", I.getToasts().some((t) => t.text === "已撤销"), I.getToasts());
+  delete sandbox.window.confirm;
+  currentFetch = () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ ok: false }) });
+}
+
+console.log("\n[39] 手动编辑后又改回改写结果：撤销可原地使用（不误判为已编辑）");
+{
+  resetAll();
+  const { props, state } = makeWiredProps("原始草稿");
+  currentFetch = sseFetch([
+    'event: meta\ndata: {"requestId":"r1","draftChars":4,"timeoutMs":90000}\n\n',
+    'event: delta\ndata: {"text":"新"}\n\n',
+    'event: done\ndata: {"text":"新草稿文本"}\n\n',
+  ]);
+  runEffectsEnabled = true;
+  let nodes = remountToolbar(props);
+  findButton(nodes, (n) => n.props["aria-label"] === "改写").props.onClick();
+  for (let i = 0; i < 40; i++) { await tick(30); nodes = remountToolbar(props); }
+  state.draft = "随手改了一下";
+  nodes = remountToolbar(props);
+  check("编辑中：按钮是改写", !!findButton(nodes, (n) => n.props["aria-label"] === "改写"));
+  state.draft = "新草稿文本";      // 又改回与改写结果一致
+  nodes = remountToolbar(props);
+  check("改回后按钮恢复撤销",
+    findButton(nodes, (n) => n.props["aria-label"] === "撤销改写") !== undefined,
+    nodes.filter((n) => n.type === "button").map((n) => n.props["aria-label"]));
+  currentFetch = () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ ok: false }) });
+}
+
 console.log("\n[27] 错误归类：连不上 vs 流中断 vs 凭据");
 {
   check("FETCH 失败 → network", I.classifyError({ code: "NETWORK" }) === "network");
@@ -1346,6 +1554,53 @@ console.log("\n[27] 错误归类：连不上 vs 流中断 vs 凭据");
   check("超时 → timeout", I.classifyError({ code: "TIMEOUT" }) === "timeout");
   check("流中断文案不含「连接失败」", !/连接失败/.test(I.errorFeedback({ code: "STREAM_BROKEN" }).text),
     I.errorFeedback({ code: "STREAM_BROKEN" }).text);
+}
+
+console.log("\n[27b] 「使用所选模型」下拉向下展开（其余弹层保持不变）");
+{
+  resetAll();
+  const conf = {
+    ok: true, storage: "config", rewriteModel: null, timeoutMs: 90000,
+    contextEnabled: true, contextTurns: 6, globalDiscipline: "正文", globalDisciplineCustom: false,
+    styles: [{ id: "concise", name: "更简洁", instruction: "x" }], templates: [],
+    toolbar: { showStyleEntry: "auto", showTemplateEntry: "auto", compactThreshold: 320 },
+    shortcuts: { openStyle: "Alt+M", openTemplate: "Alt+T", rewrite: "Alt+R" },
+  };
+  currentFetch = jsonFetch((url) => {
+    if (url.endsWith("/config")) return { ok: true, json: conf };
+    if (url.includes("/models")) return { json: { ok: true, groups: [{ id: "p1", name: "P1", models: [{ id: "m1", name: "M1" }] }], global: null } };
+    return { json: { ok: true } };
+  });
+  runEffectsEnabled = true;
+  resetHooks();
+  mountCard({ view: "page" });
+  await tick(20);
+  let nodes = walk(mountCard({ view: "page" }));
+  findButton(nodes, (n) => /pd-modelTrigger/.test(n.props.className || "")).props.onClick();
+  nodes = walk(mountCard({ view: "page" }));
+  const pop = nodes.find((n) => n.type === "div" && n.props["data-pd-popover"] === "1");
+  check("模型下拉标记为向下展开", !!pop && pop.props["data-pd-open-below"] === "1", pop && pop.props["data-pd-open-below"]);
+  check("向下展开用 top 锚定（不再用 bottom）",
+    !!pop && typeof pop.props.style.top === "number" && pop.props.style.bottom === undefined,
+    pop && pop.props.style);
+  check("向下展开时顶边在触发器下方（+6px）", !!pop && pop.props.style.top === 728 + 6, pop && pop.props.style.top);
+  // 桩视口高 800、触发器底边 728：向下可用 800-728-14=58 → 夹到最小 160
+  check("向下展开的高度上限随可视空间收缩（不伸出视口底部）",
+    !!pop && pop.props.style.maxHeight === 160, pop && pop.props.style.maxHeight);
+  check("向下展开样式声明在右上方原点", /\.pd-popoverBelow\{[^}]*transform-origin:top right/.test(I.CSS_TEXT), true);
+
+  // 其余弹层不受影响：工具行风格菜单仍向上展开
+  resetHooks();
+  I.resetConf();
+  const { props } = makeWiredProps("草稿");
+  const tbNodes = remountToolbar(props);
+  for (let i = 0; i < 3; i++) await tick(20);
+  const styleBtn = findButton(walk(tbNodes), (n) => String(n.props["aria-label"] || "").startsWith("风格："));
+  styleBtn.props.onClick();
+  const stylePop = walk(remountToolbar(props)).find((n) => n.type === "div" && n.props["data-pd-popover"] === "1");
+  check("风格菜单仍默认向上展开",
+    !!stylePop && stylePop.props["data-pd-open-below"] === "0" && typeof stylePop.props.style.bottom === "number",
+    stylePop && stylePop.props.style);
 }
 
 console.log("\n[29] 三处内容必须真正显示（风格库/模板库/全局提示词）");
@@ -1659,7 +1914,7 @@ console.log("\n[35] 浮层键盘导航：↑↓ 切换、Enter 选中且不发�
   // 根因：Alt+M 打开浮层时焦点仍在 composer，键盘事件只在浮层内部挂 onKeyDown 收不到。
   // 必须在 document 捕获阶段接管。
   const pIdx = src.indexOf("function PdPopover");
-  const seg = src.slice(pIdx, pIdx + 6000);
+  const seg = src.slice(pIdx, pIdx + 9000);
   check("浮层在 document 上接管方向键",
     /document\.addEventListener\("keydown", onDocKey, true\)/.test(seg), true);
   check("监听在卸载时移除",

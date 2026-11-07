@@ -7,12 +7,12 @@
 
 DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型选择左侧），对输入框草稿做两件事：
 
-- **AI 改写**：更简洁 / 更详细 / 结构化 / 译成英文 / 自定义；SSE 流式输出、可取消、写入后可撤销
+- **AI 改写**：更简洁 / 更详细 / 结构化 / 更精准 / 译成英文 / 自定义；SSE 流式输出、可取消、写入后可撤销
 - **模板插入**：常用提示词模板一键追加到草稿
 
 > 改写结果为 AI 辅助生成，请自行核实内容。
 
-工具行从左到右是「风格 / 模板 / 改写」三个独立控件：风格与模板各自是一级触发器、互不嵌套；「改写」是本插件这一行最靠右的控件，紧邻官方模型选择器。**设置已从工具行移入 DSH 官方「插件」页**。下拉箭头、选中态、开关沿用官方主题令牌，选中项用底色 + 细阴影描边而不是打勾。「改写」为纯图标（官方 sparkle 形状，文案在 tooltip），进行中显示转圈 + 已接收字符数，完成后同一槽位变成「↩ 撤销」。
+工具行从左到右是「风格 / 模板 / 改写」三个独立控件：风格与模板各自是一级触发器、互不嵌套；「改写」是本插件这一行最靠右的控件，紧邻官方模型选择器。**设置与主入口在左侧常用面板栏（与「远程」「技能中心」同栏）**——点击「提示词助手」图标在中央列打开设置面板，设置不再放在「插件」页里。下拉箭头、选中态、开关沿用官方主题令牌，选中项用底色 + 细阴影描边而不是打勾。「改写」为纯图标（官方 sparkle 形状，文案在 tooltip），进行中显示转圈 + 已接收字符数，完成后同一槽位变成「↩ 撤销」。
 
 模型默认走 DSH 全局默认模型（`agentDefaultModel`），也可在插件配置里固定为某个模型；改写在宿主半调用 `ctx.llm.stream`。
 
@@ -96,7 +96,7 @@ DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型�
 | idle | sparkle 图标 + 主按钮填充 |
 | requesting | 转圈，按钮禁用，tooltip「正在连接…」 |
 | streaming | 转圈 + 「改写中 N 字」，输入框上缘 2px 流光条 |
-| success | 同槽位变成「↩ 撤销」，1.5s 绿色高亮，toast「改写完成，可撤销」 |
+| success | 同槽位变成「↩ 撤销」，1.5s 绿色高亮，toast「改写完成，可撤销」；**若你手动编辑了改写结果，按钮立即回到「改写」**，撤销入口移到左侧提示条（「撤销改写」，点击前会确认会丢弃手动编辑） |
 | error | 恢复 sparkle，1px 危险色描边，左侧错误条 + 重试 |
 | cancelled | 回到 idle |
 
@@ -106,8 +106,9 @@ DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型�
 
 **Toast** 位于底部居中，最多 2 条，2.8s 自动消失，尊重 `prefers-reduced-motion`。
 
-### 设置卡片
+### 设置面板（左侧「提示词助手」）
 
+- **入口**：左侧常用面板栏的「提示词助手」图标，与「远程」「技能中心」同栏；点击后在中央列打开整页设置面板（`sidebar.panellist` + `main`）。错误条里的「打开设置」也会直接切到该面板。
 - **风格库 / 模板库默认折叠**：每条只显示「名称 + 摘要」，点击标题栏才展开编辑，避免一屏塞满输入框。
 - **上下文开关**旁显示「已开启 / 已关闭」文字，下方说明随状态变化，不只依赖滑块颜色。
 - **加载态**：配置尚未读到时显示「正在读取配置…」；读取失败则显示原因 + 重试，不会渲染成空白卡片。
@@ -119,7 +120,7 @@ DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型�
 
 设置不是插件自己的 JSON 文件，而是 DSH 官方的插件配置：
 
-- **入口**：侧栏 **插件** → 找到 `dsh-prompt-dock` → 打开它的页面，配置区在页面里（`plugins.bundle.config` 插槽，以**包名** `dsh-prompt-dock` 为 key）。
+- **入口**：左侧常用面板栏的 **提示词助手** 图标（与「远程」「技能中心」同栏）→ 打开中央面板页，配置区就在该页里（`sidebar.panellist` + `main` 两个官方座位，面板 id = `prompt-dock`）。
 - **存储**：写入当前 profile 的 `cordis.patch.yml`，由 DSH 的 `configEditor` 管理，插件本身不直接读写该文件。
 - **生效**：每个字段都是 Config 的 `.volatile()` 字段，保存后无需重启，改写行为立即变化。
 
@@ -127,7 +128,7 @@ DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型�
 
 | 分组 | 内容 |
 | --- | --- |
-| 改写模型 | 跟随全局默认，或固定为某个 `provider/model`（同名模型按 provider 区分显示） |
+| 改写模型 | 跟随全局默认，或固定为某个 `provider/model`；下拉**向下展开**（与官方模型选择器一致），按供应商分组、可滚动（来源多也不会被裁掉），高度按触发器下方可用空间收缩；同名模型按 provider 区分显示；空目录/读取失败会显式提示并可点击重试 |
 | 上下文 | 是否附带最近对话、附带轮数（1–20） |
 | 全局改写纪律 | system prompt 的共同纪律；默认只读，可解锁编辑，也可一键恢复默认 |
 | 风格库 | 每个风格的 `name` / `instruction` 可编辑 |
@@ -198,13 +199,14 @@ DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型�
 
 第 6 条是**软约束**：代码层不自动截断，而是在预览区加琥珀色提示。纪律在设置里默认只读，可解锁编辑，也可一键「恢复默认」（存为空串，后续版本改进默认文案会自动生效）。
 
-### 四个风格 instruction
+### 五个风格 instruction
 
 | 风格 | 实际约束 |
 | --- | --- |
 | 更简洁 | 删重复、修饰、客套；必须原样保留全部约束与否定条件、失败路径与异常处理要求、数字与阈值、文件/接口/字段名、验收标准；不得把含义不同的两句合并、不得把并列要求压成一个；目标 **50%–70% 且不低于 80 字** |
 | 更详细 | 只补草稿已隐含的目标/输入/输出/边界/验证方式；**禁止**引入未提及的技术选型、第三方库、数据结构或数据；判断强度不变；目标 **1.5–2.5 倍且不超过 800 字**，草稿不足三行时按内容补全而不做比例扩写 |
 | 结构化 | 固定章节序：目标 / 上下文 / 任务步骤 / 约束 / 输出格式；缺失章节写「未指定」而非编造；步骤以动词开头按序排列；标识符/路径/数字保留原形；只重组不新增需求 |
+| 更精准 | 明确要做什么、对什么对象做、按什么顺序执行哪些动作；动作具体化（动词开头、一个动作一句）、对象具体化（文件/模块/接口/页面/数据）；目标/对象/交付与验收可定位，草稿未给出的标「待确认」；不替用户决定实现方式，不新增未要求的动作/对象/技术方案/约束，不把建议或疑问改写成强制指令；目标 **80%–130% 且不低于 80 字** |
 | 译成英文 | 地道英文技术写作；逐字保留代码、路径、命令行参数、标识符、URL、术语、直接引语、数字与版本号；保留 Markdown 与 `@引用` `/命令`；保持判断强度，不扩写不解释不补充建议；无公认译法时保留原文并括号注明 |
 
 「自定义」风格的 instruction 为空串，改写时读取**该风格自身**的 `instruction`（在设置卡片「风格库」里编辑）；若该指令为空且请求未提供一次性覆盖，报 `NO_INSTRUCTION`。
@@ -259,7 +261,7 @@ DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型�
 | 芯片占位符为 `[\uE100-\uE11D\uFFFC]`，`setDraft` 会清掉它们 | `detectChip` 额外检测这些字符作为兜底 |
 | 设置表单只接受 volatile 字段：`settings.mutate(ns, ops)` 校验路径后经 `configEditor.edit()` 写 YAML | 所有可编辑项都声明为 Config 的 `.volatile()` 字段；写入走 `settings.mutate` |
 | volatile 字段只有 `.get()`，值由 Loader 从 `cordis.patch.yml` 重新解析产生 | 插件不在内存里改配置；回填与保存都写存储，读时重新取 |
-| `plugins.bundle.config` 是以包名为 key 的 keyed slot，只在组合包详情页以 `view: 'page'` 渲染 | 配置卡片注册为 `key: "dsh-prompt-dock"` |
+| `plugins.bundle.config` 是以包名为 key 的 keyed slot，只在组合包详情页渲染 | 改用 `sidebar.panellist` + `main`：左侧常用面板栏放入口，中央面板页渲染设置卡片 |
 
 > 说明：早期设计文档提到的 `settings.plugin.item` / `installSection` / `SettingsScope` 在 DSH 0.2.1-rc.2 中不存在，本插件按上述真实 API 实现。
 
@@ -278,7 +280,7 @@ DSH 插件，挂在**输入框工具行**（`conversation.input.right`，模型�
 | 路由 | 说明 |
 | --- | --- |
 | `GET/POST /api/prompt-dock/config` | 读取（规范化后的）设置；POST 接受**部分字段**补丁，未提交的字段保持现值 |
-| `GET /api/prompt-dock/models` | 模型目录 + 全局默认 |
+| `GET /api/prompt-dock/models` | 模型目录 + 全局默认；`?fresh=1` 绕过宿主目录缓存重新枚举全部 provider（打开下拉时使用）。供应商增删/配置/凭据变化由宿主事件即时失效缓存 |
 | `POST /api/prompt-dock/open-config` | 在文件管理器中定位 profile 的 `cordis.patch.yml` |
 | `POST /api/prompt-dock/rewrite` | `{text, styleId, customInstruction?, sessionId, useContext}` → `{ok, text}` |
 | `POST /api/prompt-dock/rewrite-stream` | 同上，`text/event-stream`：`meta` / `delta` / `done` / `error`；`meta` 带 `draftChars` 与 `timeoutMs` |
@@ -333,5 +335,5 @@ Node 版本要求见 `package.json` 的 `engines`。
 | GitHub topic | `dsh-plugin`（插件市场按此 topic 自动收录） |
 | 兼容 DSH | `0.2.x`（已在 `0.2.1-rc.2` 上核对） |
 | 许可证 | MIT |
-| 挂载插槽 | `conversation.input.right`（工具行）、`plugins.bundle.config`（配置卡片，key = `dsh-prompt-dock`） |
+| 挂载插槽 | `conversation.input.right`（工具行）、`sidebar.panellist`（左侧常用面板入口，id = `prompt-dock`）、`main`（中央面板页，key = `prompt-dock`） |
 | 仓库 | https://github.com/wnei-f/dsh-prompt-dock |
